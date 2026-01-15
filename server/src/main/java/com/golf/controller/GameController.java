@@ -34,6 +34,8 @@ public class GameController {
     /**
      * Create a new game
      * POST /api/games
+     * Body: { "numPlayers": <int> }
+     * - numPlayers: number of players to create in the game
      */
     @PostMapping
     public ResponseEntity<GameStateResponse> createGame(@RequestBody CreateGameRequest request) {
@@ -121,7 +123,8 @@ public class GameController {
     /**
      * Swap drawn card with hand card
      * POST /api/games/{gameId}/swap
-     * Body: { "cardIndex": 2 }
+     * Body: { "cardIndex": <int> }
+     * - cardIndex: index in the current player's hand to swap (0-based)
      */
     @PostMapping("/{gameId}/swap")
     public ResponseEntity<GameStateResponse> swapCard(
@@ -154,7 +157,9 @@ public class GameController {
     /**
      * Match a card with the discard pile
      * POST /api/games/{gameId}/match
-     * Body: { "playerIndex": 0, "cardIndex": 1 }
+     * Body: { "playerIndex": <int>, "cardIndex": <int> }
+     * - playerIndex: index of the player performing the match or target (0-based)
+     * - cardIndex: index of the card to match in the player's hand (0-based)
      */
     @PostMapping("/{gameId}/match")
     public ResponseEntity<GameStateResponse> matchCard(
@@ -188,7 +193,8 @@ public class GameController {
     /**
      * Action: Peek at own card (7 or 8)
      * POST /api/games/{gameId}/action/peek-own
-     * Body: { "cardIndex": 0 }
+     * Body: { "cardIndex": <int> }
+     * - cardIndex: index in the current player's hand to peek at (0-based)
      */
     @PostMapping("/{gameId}/action/peek-own")
     public ResponseEntity<GameStateResponse> peekOwnCard(
@@ -207,7 +213,9 @@ public class GameController {
     /**
      * Action: Peek at opponent's card (9 or 10)
      * POST /api/games/{gameId}/action/peek-opponent
-     * Body: { "opponentIndex": 1, "cardIndex": 0 }
+     * Body: { "opponentIndex": <int>, "cardIndex": <int> }
+     * - opponentIndex: index of the opponent player (0-based)
+     * - cardIndex: index of the opponent's card to peek at (0-based)
      */
     @PostMapping("/{gameId}/action/peek-opponent")
     public ResponseEntity<GameStateResponse> peekOpponentCard(
@@ -224,16 +232,19 @@ public class GameController {
     }
 
     /**
-     * Action: Jack blind swap - step 1
-     * POST /api/games/{gameId}/action/blind-swap-1
-     * Body: { "cardIndex": 0 }
+     * Action: Jack blind swap
+     * POST /api/games/{gameId}/action/blind-swap
+     * Body: { "cardIndex": <int>, "opponentIndex": <int>, "opponentCardIndex": <int> }
+     * - cardIndex: index in current player's hand to swap (0-based)
+     * - opponentIndex: index of the opponent player (0-based)
+     * - opponentCardIndex: index of the opponent's card to swap (0-based)
      */
     @PostMapping("/{gameId}/action/blind-swap")
     public ResponseEntity<GameStateResponse> blindSwap(
             @PathVariable String gameId,
             @RequestBody PlayerActionRequest request) {
-        logger.info("POST /api/games/{}/action/blind-swap-1 - cardIndex: {}",
-                gameId, request.getCardIndex());
+        logger.info("POST /api/games/{}/action/blind-swap - cardIndex: {}, opponentIndex: {}, opponentCardIndex: {}",
+                gameId, request.getCardIndex(), request.getOpponentIndex(), request.getOpponentCardIndex());
 
         Game game = gameService.getGame(gameId);
         gameLogicService.blindSwap(game, request.getCardIndex(), request.getOpponentIndex(), request.getOpponentCardIndex());
@@ -245,7 +256,9 @@ public class GameController {
     /**
      * Action: Queen peek
      * POST /api/games/{gameId}/action/queen-peek
-     * Body: { "opponentIndex": 1, "cardIndex": 0 }
+     * Body: { "opponentIndex": <int>, "cardIndex": <int> }
+     * - opponentIndex: index of the opponent player (0-based)
+     * - cardIndex: index of the opponent's card to peek at (0-based)
      */
     @PostMapping("/{gameId}/action/queen-peek")
     public ResponseEntity<GameStateResponse> queenPeek(
@@ -264,7 +277,9 @@ public class GameController {
     /**
      * Action: Queen swap
      * POST /api/games/{gameId}/action/queen-swap
-     * Body: { "playerIndex": 0, "cardIndex": 1 }
+     * Body: { "playerIndex": <int>, "cardIndex": <int> }
+     * - playerIndex: index of the player performing the swap (0-based)
+     * - cardIndex: index of the player's card to swap (0-based)
      */
     @PostMapping("/{gameId}/action/queen-swap")
     public ResponseEntity<GameStateResponse> queenSwap(
@@ -275,6 +290,21 @@ public class GameController {
 
         Game game = gameService.getGame(gameId);
         gameLogicService.queenSwap(game, request.getPlayerIndex(), request.getCardIndex());
+        gameService.updateGame(game);
+
+        return ResponseEntity.ok(GameStateResponse.fromGame(game));
+    }
+
+    /**
+     * Action: Queen skip swap
+     * POST /api/games/{gameId}/action/queen-skip
+     */
+    @PostMapping("/{gameId}/action/queen-skip")
+    public ResponseEntity<GameStateResponse> queenSkip(@PathVariable String gameId) {
+        logger.info("POST /api/games/{}/action/queen-skip", gameId);
+
+        Game game = gameService.getGame(gameId);
+        gameLogicService.queenSkipSwap(game);
         gameService.updateGame(game);
 
         return ResponseEntity.ok(GameStateResponse.fromGame(game));
