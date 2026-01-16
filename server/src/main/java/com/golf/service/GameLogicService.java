@@ -35,8 +35,6 @@ public class GameLogicService {
         card.setFaceUp(true);
         game.setDrawnCard(card);
         game.setPhase(GamePhase.AFTER_DRAW);
-
-        logger.debug("Drew card: {}", card);
     }
 
     /**
@@ -58,12 +56,13 @@ public class GameLogicService {
         game.setPhase(GamePhase.AFTER_DRAW);
 
         logger.debug("Drew card from discard: {}", card);
+        logger.debug("Discard pile size is now {}", game.getDiscardPile().size());
     }
 
     /**
      * Swap the drawn card with a card from the player's hand
      */
-    public void swapCard(Game game, int cardIndex) {
+    public void swapDrawnCard(Game game, int cardIndex) {
         logger.info("Player {} swapping card at index {} in game {}",
                 game.getCurrentPlayer().getName(), cardIndex, game.getGameId());
 
@@ -92,6 +91,7 @@ public class GameLogicService {
         game.setDrawnCard(null);
 
         logger.debug("Swapped card. Discarded: {}", discardedCard);
+        logger.info("Discard pile size is now {}", game.getDiscardPile().size());
 
         // Check if discarded card is an action card
         if (discardedCard.isActionCard()) {
@@ -121,6 +121,7 @@ public class GameLogicService {
         game.setDrawnCard(null);
 
         logger.debug("Discarded drawn card: {}", card);
+        logger.info("Discard pile size is now {}", game.getDiscardPile().size());
 
         // Check if it's an action card
         if (card.isActionCard()) {
@@ -134,36 +135,35 @@ public class GameLogicService {
     /**
      * Match a card from hand with the top of discard pile
      */
-    public void matchCard(Game game, int playerIndex, int cardIndex) {
-        logger.info("Player {} attempting to match card at index {} in game {}",
-                playerIndex, cardIndex, game.getGameId());
-
-        validatePhase(game, GamePhase.DRAW, "Can only match during DRAW phase");
+    public void matchCard(Game game, int playerIndex, int opponentIndex, int opponentCardIndex) {
+        logger.info("Player {} attempting to match card from Player {} hand at index {} in game {}",
+                playerIndex, opponentIndex, opponentCardIndex, game.getGameId());
 
         if (game.getDiscardPile().isEmpty()) {
             throw new InvalidMoveException("Discard pile is empty, cannot match");
         }
 
-        Player player = game.getPlayers().get(playerIndex);
+        Player playerWhoseDeckWeAreMatchingFrom = game.getPlayers().get(opponentIndex);
+        Player playerThatWantsToMatch = game.getPlayers().get(playerIndex);
         Card topDiscard = game.getDiscardPile().get(game.getDiscardPile().size() - 1);
-        Card playerCard = player.getCard(cardIndex);
+        Card matchedCard = playerWhoseDeckWeAreMatchingFrom.removeCard(opponentCardIndex);
 
-        if (playerCard == null) {
+        if (matchedCard == null) {
             throw new InvalidMoveException("Invalid card index");
         }
 
         // Check if ranks match
-        if (playerCard.getRank() != topDiscard.getRank()) {
-            logger.warn("Match failed: {} does not match {}", playerCard, topDiscard);
-            throw new InvalidMoveException("Card ranks do not match");
+        if (matchedCard.getRank() != topDiscard.getRank()) {
+            logger.warn("Match failed: {} does not match {}", matchedCard, topDiscard);
+            playerThatWantsToMatch.getHand().add(matchedCard);
+            playerThatWantsToMatch.getHand().add(game.getDeck().draw());
+        } else {
+            matchedCard.setFaceUp(true);
+            game.getDiscardPile().add(matchedCard);
+
+            logger.info("Successful match: {} matched with {}", matchedCard, topDiscard);
         }
 
-        // Valid match - remove from hand and add to discard
-        Card matchedCard = player.removeCard(cardIndex);
-        matchedCard.setFaceUp(true);
-        game.getDiscardPile().add(matchedCard);
-
-        logger.info("Successful match: {} matched with {}", matchedCard, topDiscard);
     }
 
     /**
@@ -212,6 +212,10 @@ public class GameLogicService {
             throw new InvalidMoveException("Cannot peek at own cards with this action");
         }
 
+        if (opponentIndex > game.getPlayers().size() - 1) {
+            throw new InvalidMoveException("Invalid opponent index");
+        }
+
         Player opponent = game.getPlayers().get(opponentIndex);
         Card card = opponent.getCard(cardIndex);
 
@@ -231,7 +235,7 @@ public class GameLogicService {
     /**
      * Handle Jack blind swap - step 1: select own card
      */
-    public void blindSwap(Game game, int ownCardIndex, int opponentIndex, int opponentCardIndex) {
+    public void swap(Game game, int ownCardIndex, int opponentIndex, int opponentCardIndex) {
         validatePhase(game, GamePhase.ACTION, "Not in ACTION phase");
         validateActionCard(game, Rank.JACK);
 
@@ -258,16 +262,24 @@ public class GameLogicService {
         logger.debug("Jack blind swap - selected own card at index {}", ownCardIndex);
 
         if (context.getStep() != 1) {
+            context.getSelections().clear();
             throw new InvalidMoveException("Invalid action step");
         }
 
         if (opponentIndex == game.getCurrentPlayerIndex()) {
+            context.setStep(0);
+            context.getSelections().clear();
             throw new InvalidMoveException("Cannot swap with own cards");
         }
 
         // Get first selection
         Game.ActionContext.CardSelection firstSelection = context.getSelections().get(0);
         Player player1 = game.getPlayers().get(firstSelection.getPlayerIndex());
+        if (opponentIndex > game.getPlayers().size() - 1) {
+            context.setStep(0);
+            context.getSelections().clear();
+            throw new InvalidMoveException("Invalid opponent index");
+        }
         Player player2 = game.getPlayers().get(opponentIndex);
 
         // Perform blind swap
@@ -286,6 +298,19 @@ public class GameLogicService {
     }
 
     /**
+     * Skip Jack swap
+     */
+    public void jackSkipSwap(Game game) {
+        validatePhase(game, GamePhase.ACTION, "Not in ACTION phase");
+        validateActionCard(game, Rank.JACK);
+
+        logger.info("Player {} skipped Jack swap", game.getCurrentPlayer().getName());
+
+        game.setActionContext(null);
+        endTurn(game);
+    }
+
+    /**
      * Handle Queen look and swap - step 1: peek at opponent's card
      */
     public void queenPeek(Game game, int opponentIndex, int cardIndex) {
@@ -297,6 +322,9 @@ public class GameLogicService {
         }
 
         Game.ActionContext context = game.getActionContext();
+        if (opponentIndex > game.getPlayers().size() - 1) {
+            throw new InvalidMoveException("Invalid opponent index");
+        }
         Player opponent = game.getPlayers().get(opponentIndex);
         Card card = opponent.getCard(cardIndex);
 
@@ -318,29 +346,62 @@ public class GameLogicService {
     /**
      * Handle Queen swap - step 2: optionally swap with any card
      */
-    public void queenSwap(Game game, int targetPlayerIndex, int targetCardIndex) {
+    public void queenSwap(Game game, int ownCardIndex, int targetPlayerIndex, int targetCardIndex) {
         validatePhase(game, GamePhase.ACTION, "Not in ACTION phase");
         validateActionCard(game, Rank.QUEEN);
 
         Game.ActionContext context = game.getActionContext();
-        if (context.getStep() != 1) {
-            throw new InvalidMoveException("Must peek first");
+        if (context.getStep() != 0) {
+            throw new InvalidMoveException("Invalid action step");
         }
 
-        // Get peeked card info
-        Game.ActionContext.CardSelection peekedSelection = context.getSelections().get(0);
-        Player peekedPlayer = game.getPlayers().get(peekedSelection.getPlayerIndex());
-        Player targetPlayer = game.getPlayers().get(targetPlayerIndex);
+        Player currentPlayer = game.getCurrentPlayer();
+        Card card = currentPlayer.getCard(ownCardIndex);
 
-        // Swap the peeked card with the target card
-        Card peekedCard = peekedPlayer.getHand().get(peekedSelection.getCardIndex());
-        Card targetCard = targetPlayer.getHand().get(targetCardIndex);
+        if (card == null) {
+            throw new InvalidMoveException("Invalid card index");
+        }
 
-        peekedPlayer.getHand().set(peekedSelection.getCardIndex(), targetCard);
-        targetPlayer.getHand().set(targetCardIndex, peekedCard);
+        // Store selection
+        Game.ActionContext.CardSelection selection = new Game.ActionContext.CardSelection();
+        selection.setPlayerIndex(game.getCurrentPlayerIndex());
+        selection.setCardIndex(ownCardIndex);
+        selection.setCard(card);
+        context.getSelections().add(selection);
+        context.setStep(1);
 
-        logger.info("Queen swap executed between {} and {}",
-                peekedPlayer.getName(), targetPlayer.getName());
+        logger.debug("Queen swap - selected own card at index {}", ownCardIndex);
+
+        if (context.getStep() != 1) {
+            context.getSelections().clear();
+            throw new InvalidMoveException("Invalid action step");
+        }
+
+        if (targetPlayerIndex == game.getCurrentPlayerIndex()) {
+            context.getSelections().clear();
+            context.setStep(0);
+            throw new InvalidMoveException("Cannot swap with own cards");
+        }
+
+        // Get first selection
+        Game.ActionContext.CardSelection firstSelection = context.getSelections().get(0);
+        Player player1 = game.getPlayers().get(firstSelection.getPlayerIndex());
+        if (targetPlayerIndex > game.getPlayers().size() - 1) {
+            context.setStep(0);
+            context.setSelections(null);
+            throw new InvalidMoveException("Invalid opponent index");
+        }
+        Player player2 = game.getPlayers().get(targetPlayerIndex);
+
+        // Perform swap
+        Card card1 = player1.getHand().get(firstSelection.getCardIndex());
+        Card card2 = player2.getHand().get(targetCardIndex);
+
+        player1.getHand().set(firstSelection.getCardIndex(), card2);
+        player2.getHand().set(targetCardIndex, card1);
+
+        logger.info("Swap executed between {} and {}",
+                player1.getName(), player2.getName());
 
         // End action
         game.setActionContext(null);

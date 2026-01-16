@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Represents a deck of playing cards with shuffle and draw operations
@@ -37,6 +38,11 @@ public class Deck {
             for (Rank rank : Rank.values()) {
                 cards.add(new Card(suit, rank));
             }
+        }
+        Set <Card> cardSet = Set.copyOf(cards);
+        if (cardSet.size() != 52) {
+            logger.error("Deck initialization error: expected 52 unique cards, found {}", cardSet.size());
+            throw new IllegalStateException("Deck must contain 52 unique cards");
         }
         logger.debug("Initialized deck with {} cards", cards.size());
     }

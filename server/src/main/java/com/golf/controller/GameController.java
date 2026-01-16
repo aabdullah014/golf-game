@@ -133,7 +133,7 @@ public class GameController {
         logger.info("POST /api/games/{}/swap - cardIndex: {}", gameId, request.getCardIndex());
 
         Game game = gameService.getGame(gameId);
-        gameLogicService.swapCard(game, request.getCardIndex());
+        gameLogicService.swapDrawnCard(game, request.getCardIndex());
         gameService.updateGame(game);
 
         return ResponseEntity.ok(GameStateResponse.fromGame(game));
@@ -169,7 +169,7 @@ public class GameController {
                 gameId, request.getPlayerIndex(), request.getCardIndex());
 
         Game game = gameService.getGame(gameId);
-        gameLogicService.matchCard(game, request.getPlayerIndex(), request.getCardIndex());
+        gameLogicService.matchCard(game, request.getPlayerIndex(), request.getOpponentIndex(), request.getOpponentCardIndex());
         gameService.updateGame(game);
 
         return ResponseEntity.ok(GameStateResponse.fromGame(game));
@@ -247,7 +247,22 @@ public class GameController {
                 gameId, request.getCardIndex(), request.getOpponentIndex(), request.getOpponentCardIndex());
 
         Game game = gameService.getGame(gameId);
-        gameLogicService.blindSwap(game, request.getCardIndex(), request.getOpponentIndex(), request.getOpponentCardIndex());
+        gameLogicService.swap(game, request.getCardIndex(), request.getOpponentIndex(), request.getOpponentCardIndex());
+        gameService.updateGame(game);
+
+        return ResponseEntity.ok(GameStateResponse.fromGame(game));
+    }
+
+    /**
+     * Action: Queen skip swap
+     * POST /api/games/{gameId}/action/queen-skip
+     */
+    @PostMapping("/{gameId}/action/jack-skip")
+    public ResponseEntity<GameStateResponse> jackSkip(@PathVariable String gameId) {
+        logger.info("POST /api/games/{}/action/jack-skip", gameId);
+
+        Game game = gameService.getGame(gameId);
+        gameLogicService.jackSkipSwap(game);
         gameService.updateGame(game);
 
         return ResponseEntity.ok(GameStateResponse.fromGame(game));
@@ -289,7 +304,7 @@ public class GameController {
                 gameId, request.getPlayerIndex(), request.getCardIndex());
 
         Game game = gameService.getGame(gameId);
-        gameLogicService.queenSwap(game, request.getPlayerIndex(), request.getCardIndex());
+        gameLogicService.queenSwap(game, request.getCardIndex(), request.getPlayerIndex(), request.getCardIndex());
         gameService.updateGame(game);
 
         return ResponseEntity.ok(GameStateResponse.fromGame(game));

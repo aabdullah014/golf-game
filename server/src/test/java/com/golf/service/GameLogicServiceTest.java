@@ -73,7 +73,7 @@ class GameLogicServiceTest {
     }
 
     @Test
-    void testSwapCard() {
+    void testSwapDrawnCard() {
         // Draw a card first
         gameLogicService.drawFromDeck(game);
         Card drawnCard = game.getDrawnCard();
@@ -81,7 +81,7 @@ class GameLogicServiceTest {
         int initialHandSize = game.getCurrentPlayer().getHandSize();
 
         // Swap with first card in hand
-        gameLogicService.swapCard(game, 0);
+        gameLogicService.swapDrawnCard(game, 0);
 
         assertNull(game.getDrawnCard());
         assertEquals(initialHandSize, game.getCurrentPlayer().getHandSize());
@@ -89,11 +89,11 @@ class GameLogicServiceTest {
     }
 
     @Test
-    void testSwapCardInvalidIndex() {
+    void testSwapDrawnCardInvalidIndex() {
         gameLogicService.drawFromDeck(game);
 
         assertThrows(InvalidMoveException.class, () -> {
-            gameLogicService.swapCard(game, 10); // Invalid index
+            gameLogicService.swapDrawnCard(game, 10); // Invalid index
         });
     }
 
@@ -120,9 +120,10 @@ class GameLogicServiceTest {
 
         int initialHandSize = game.getCurrentPlayer().getHandSize();
 
-        gameLogicService.matchCard(game, 0, 0);
+        gameLogicService.matchCard(game, 0, 0, 0);
 
         assertEquals(initialHandSize - 1, game.getCurrentPlayer().getHandSize());
+        assertEquals(2, game.getDiscardPile().size());
     }
 
     @Test
@@ -133,9 +134,32 @@ class GameLogicServiceTest {
         Card playerCard = new Card(Suit.CLUBS, Rank.THREE); // Different rank
         game.getCurrentPlayer().getHand().set(0, playerCard);
 
-        assertThrows(InvalidMoveException.class, () -> {
-            gameLogicService.matchCard(game, 0, 0);
-        });
+
+        int initialHandSize = game.getCurrentPlayer().getHandSize();
+
+        gameLogicService.matchCard(game, 0, 0, 0);
+
+        assertEquals(initialHandSize + 1, game.getCurrentPlayer().getHandSize());
+        assertEquals(1, game.getDiscardPile().size());
+    }
+
+    @Test
+    void testMatchCardWrongRankOtherPlayer() {
+        Card discardCard = new Card(Suit.HEARTS, Rank.FIVE);
+        game.getDiscardPile().add(discardCard);
+
+        Card playerCard = new Card(Suit.CLUBS, Rank.THREE); // Different rank
+        game.getCurrentPlayer().getHand().set(0, playerCard);
+
+
+        int initialHandSize = game.getCurrentPlayer().getHandSize();
+
+        gameLogicService.matchCard(game, 0, 1, 0);
+
+        assertEquals(initialHandSize + 2, game.getCurrentPlayer().getHandSize());
+        assertEquals(1, game.getDiscardPile().size());
+
+        assertEquals(initialHandSize - 1, game.getPlayers().get(1).getHandSize());
     }
 
     @Test

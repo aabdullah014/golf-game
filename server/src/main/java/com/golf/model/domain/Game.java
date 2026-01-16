@@ -111,6 +111,10 @@ public class Game {
     public void startGame() {
         phase = GamePhase.DRAW;
         updatedAt = LocalDateTime.now();
+        for (Player player : players) {
+            player.getHand().get(2).setFaceUp(false);
+            player.getHand().get(3).setFaceUp(false);
+        }
         logger.info("Game {} started", gameId);
     }
 
